@@ -190,7 +190,7 @@ export class AuthService {
     }
     if (user) {
       const expiresDate = new Date();
-      expiresDate.setMinutes(expiresDate.getMinutes() + 15); // Token valid for 15 minutes
+      expiresDate.setDate(expiresDate.getDate() + 7); // Token valid for 7 days
 
       const resetToken = nanoid(64); // Generate a unique reset token
 
