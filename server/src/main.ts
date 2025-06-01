@@ -3,7 +3,9 @@ import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { ValidationPipe } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser'
+import * as cookieParser from 'cookie-parser';
+import { join } from 'path';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +23,8 @@ async function bootstrap() {
   // Apply LoggerMiddleware globally
   const loggerMiddleware = new LoggerMiddleware();
   app.use(loggerMiddleware.use);
+
+  app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
   
   await app.listen(process.env.PORT ?? 5000);
   Logger.log(`🚀 Application is running on: http://localhost:5000`)

@@ -7,6 +7,10 @@ import {
   Post,
   Res,
   UnauthorizedException,
+  Get,
+  Param,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -17,17 +21,20 @@ import { Request, Response } from 'express';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthenticationGuard } from 'src/guards/auth.guards';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { multerOptions } from '../multer/multer.config';
+import { Express } from 'express';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) {}
 
-    @Post('signup')
-    async signup(@Body() signupData: SignupDto) {
-        return this.authService.signup(signupData);
-    }
+  @Post('signup')
+  async signup(@Body() signupData: SignupDto) {
+    return this.authService.signup(signupData);
+  }
 
-     @Post('login')
+  @Post('login')
   async login(
     @Body() credentials: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -37,47 +44,46 @@ export class AuthController {
 
     response.cookie('accessToken', accessToken, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 day
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: 'lax',
     });
 
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: 'lax',
     });
-    
+
     return { user, accessToken, refreshToken };
   }
 
-    @Post('refresh')
-async refreshToken(
-  @Body() refreshTokenDto: RefreshTokenDto,
-  @Res({ passthrough: true }) response: Response,
-) {
-  // Assuming your authService.refreshToken returns new tokens
-  const { accessToken, refreshToken } = await this.authService.refreshToken(refreshTokenDto.refreshToken);
+  @Post('refresh')
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.refreshToken(
+      refreshTokenDto.refreshToken,
+    );
 
-  // Set the updated tokens as cookies again
-  response.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax',
-  });
+    response.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    });
 
-  response.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax',
-  });
+    response.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    });
 
-  // Return the tokens in the response JSON
-  return {
-    message: 'Tokens refreshed',
-    accessToken,
-    refreshToken,
-  };
-}
+    return {
+      message: 'Tokens refreshed',
+      accessToken,
+      refreshToken,
+    };
+  }
 
   @Put('change-password')
   @UseGuards(AuthenticationGuard)
@@ -116,10 +122,9 @@ async refreshToken(
   async verifyEmail(@Body('email') email: string, @Body('code') code: string) {
     return this.authService.verifyEmail(email, code);
   }
-  
+
   @Post('logout')
   async logout(@Res({ passthrough: true }) response: Response) {
-    // Clear the cookies by setting them to empty with immediate expiry
     response.clearCookie('accessToken', {
       httpOnly: true,
       sameSite: 'lax',
@@ -131,5 +136,37 @@ async refreshToken(
     });
 
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('avatar')
+  @UseGuards(AuthenticationGuard)
+  @UseInterceptors(FileInterceptor('avatar', multerOptions))
+  async uploadAvatar(
+    @Req() req: Request & { userId?: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!req.userId) throw new UnauthorizedException();
+
+    const user = await this.authService.findUserById(req.userId);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const updatedUser = await this.authService.updateAvatar(
+      user.email,
+      file.filename,
+    );
+
+    return {
+      avatar: updatedUser.avatar,
+      message: 'Avatar uploaded successfully',
+    };
+  }
+
+  @Get('avatar/:email')
+  async getAvatar(@Param('email') email: string, @Req() req: Request) {
+    const avatarPath = await this.authService.getAvatar(email);
+    if (!avatarPath) return { avatar: null };
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return { avatar: `${baseUrl}/uploads/${avatarPath}` };
   }
 }

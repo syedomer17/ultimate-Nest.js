@@ -96,7 +96,9 @@ export class AuthService {
     }
 
     if (!checkUser.isEmailVerified) {
-      throw new BadRequestException('Email not verified, please verify your email first');
+      throw new BadRequestException(
+        'Email not verified, please verify your email first',
+      );
     }
 
     const userId = checkUser._id as string;
@@ -115,22 +117,21 @@ export class AuthService {
   }
 
   async generateTokens(userId: string) {
-  const accessToken = this.jwtService.sign(
-    { userId, type: 'access' },
-    { expiresIn: '7d' },
-  );
+    const accessToken = this.jwtService.sign(
+      { userId, type: 'access' },
+      { expiresIn: '7d' },
+    );
 
-  const refreshToken = uuidv4() + nanoid(16); // Unique refresh token
+    const refreshToken = uuidv4() + nanoid(16); // Unique refresh token
 
-  await this.RefreshTokenModel.create({
-    userId: new Types.ObjectId(userId),
-    token: refreshToken,
-    expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 
-  });
+    await this.RefreshTokenModel.create({
+      userId: new Types.ObjectId(userId),
+      token: refreshToken,
+      expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
 
-  return { accessToken, refreshToken };
-}
-
+    return { accessToken, refreshToken };
+  }
 
   async storeRefreshToken(token: string, userId: string) {
     const expiresDate = new Date();
@@ -150,122 +151,162 @@ export class AuthService {
   }
 
   // chanage password
-    async changePassword(userId: string, oldPassword: string ,newPassword: string) {
-        const user  =  await this.UserModel.findById(userId);
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
-        if (!oldPassword) { 
-            throw new BadRequestException('Old password  must be provided');
-        }
-        if (!newPassword) {
-            throw new BadRequestException('New password must be provided');
-        }
-        const passwordMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!passwordMatch) {
-            throw new UnauthorizedException('Old password is incorrect');
-        }
-
-        user.password = await bcrypt.hash(newPassword, 10);
-        await user.save();
-        return {
-            message: 'Password changed successfully',
-            user: {
-                id: user._id as string,
-                name: user.name,
-                email: user.email,
-            },
-        };  
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.UserModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
-    async forgotPassword(email: string) {
-        const user = await this.UserModel.findOne({ email});
-
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
-        if(user){
-            const expiresDate = new Date();
-            expiresDate.setMinutes(expiresDate.getMinutes() + 15); // Token valid for 15 minutes
-
-            const resetToken =  nanoid(64); // Generate a unique reset token
-
-            await this.ResetTokenModel.create({
-                userId: user._id,
-                token: resetToken,
-                expiresAt: expiresDate,
-            }); 
-            await this.mailService.sendPasswordResetEmail(user.email, resetToken);
-            return {
-                message: 'Reset password email sent successfully',
-                user: {
-                    id: user._id as string,
-                    name: user.name,
-                    email: user.email,
-                },
-            };
-        }
-    }  
-    
-    async resetPassword(resetToken: string, newPassword: string) {
-        const token = await this.ResetTokenModel.findByIdAndDelete({
-            token: resetToken,
-            expiryDate: { $gte: new Date() },
-        });
-        if (!token) {
-            throw new BadRequestException('Invalid or expired reset token');
-        }
-
-        const userId = (token.userId as Types.ObjectId).toString();
-        const user = await this.UserModel.findById(userId);
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
-        if (!newPassword) {
-            throw new BadRequestException('New password must be provided');
-        }
-        user.password = await bcrypt.hash(newPassword, 10);
-        await user.save();
-        return {
-            message: 'Password reset successfully',
-            user: {
-                id: user._id as string,
-                name: user.name,
-                email: user.email,
-            },
-        };
+    if (!oldPassword) {
+      throw new BadRequestException('Old password  must be provided');
     }
-    async refreshToken(refreshToken: string) {
-        const token = await this.RefreshTokenModel.findOneAndDelete({ token: refreshToken,expiryDate: { $gte: new Date() }, });
-        if (!token) {
-            throw new UnauthorizedException('Invalid or expired refresh token');
-        }
-        const userId = token.userId.toString();
-        const user = await this.UserModel.findById(userId);
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
-        const newTokens = await this.generateTokens(userId);
-        return {
-            message: 'Tokens refreshed successfully',
-            user: {
-                id: user._id as string,
-                name: user.name,
-                email: user.email,
-            },
-            ...newTokens,
-        };      
+    if (!newPassword) {
+      throw new BadRequestException('New password must be provided');
+    }
+    const passwordMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Old password is incorrect');
     }
 
-    async verifyEmail(email: string, otp: string) {
-        await this.otpService.verifyOtp(email, otp);
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    return {
+      message: 'Password changed successfully',
+      user: {
+        id: user._id as string,
+        name: user.name,
+        email: user.email,
+      },
+    };
+  }
+  async forgotPassword(email: string) {
+    const user = await this.UserModel.findOne({ email });
 
-        await this.UserModel.findOneAndUpdate({email}, {$set: { isEmailVerified: true }}, { new: true });
-        return {
-            message: 'Email verified successfully',
-            user: {
-                email,
-                isEmailVerified: true,
-            },
-        };  
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
+    if (user) {
+      const expiresDate = new Date();
+      expiresDate.setMinutes(expiresDate.getMinutes() + 15); // Token valid for 15 minutes
+
+      const resetToken = nanoid(64); // Generate a unique reset token
+
+      await this.ResetTokenModel.create({
+        userId: user._id,
+        token: resetToken,
+        expiresAt: expiresDate,
+      });
+      await this.mailService.sendPasswordResetEmail(user.email, resetToken);
+      return {
+        message: 'Reset password email sent successfully',
+        user: {
+          id: user._id as string,
+          name: user.name,
+          email: user.email,
+        },
+      };
+    }
+  }
+
+  async resetPassword(resetToken: string, newPassword: string) {
+    const token = await this.ResetTokenModel.findByIdAndDelete({
+      token: resetToken,
+      expiryDate: { $gte: new Date() },
+    });
+    if (!token) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const userId = (token.userId as Types.ObjectId).toString();
+    const user = await this.UserModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!newPassword) {
+      throw new BadRequestException('New password must be provided');
+    }
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    return {
+      message: 'Password reset successfully',
+      user: {
+        id: user._id as string,
+        name: user.name,
+        email: user.email,
+      },
+    };
+  }
+  async refreshToken(refreshToken: string) {
+    const token = await this.RefreshTokenModel.findOneAndDelete({
+      token: refreshToken,
+      expiryDate: { $gte: new Date() },
+    });
+    if (!token) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    const userId = token.userId.toString();
+    const user = await this.UserModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const newTokens = await this.generateTokens(userId);
+    return {
+      message: 'Tokens refreshed successfully',
+      user: {
+        id: user._id as string,
+        name: user.name,
+        email: user.email,
+      },
+      ...newTokens,
+    };
+  }
+
+  async verifyEmail(email: string, otp: string) {
+    await this.otpService.verifyOtp(email, otp);
+
+    const updatedUser = await this.UserModel.findOneAndUpdate(
+      { email },
+      { $set: { isEmailVerified: true } },
+      { new: true },
+    );
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      message: 'Email verified successfully',
+      user: {
+        id: updatedUser._id as string,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        isEmailVerified: updatedUser.isEmailVerified,
+      },
+    };
+  }
+  async updateAvatar(email: string, avatarPath: string) {
+    const user = await this.UserModel.findOneAndUpdate(
+      { email },
+      { avatar: avatarPath },
+      { new: true },
+    );
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  async getAvatar(email: string) {
+    const user = await this.UserModel.findOne({ email });
+    if (!user) throw new NotFoundException('User not found');
+    return user.avatar;
+  }
+  async findUserById(userId: string) {
+  const user = await this.UserModel.findById(userId);
+  if (!user) {
+    throw new NotFoundException('User not found');
+  }
+  return user;
+}
 }

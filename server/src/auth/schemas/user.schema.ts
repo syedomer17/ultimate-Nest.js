@@ -1,5 +1,5 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class User {
@@ -14,6 +14,9 @@ export class User {
 
   @Prop({ default: false })
   isEmailVerified: boolean;
+
+  @Prop()
+  avatar?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
